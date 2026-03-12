@@ -1,5 +1,7 @@
 # Amazon Sales Dashboard (Shiny)
 
+![Dashboard](img/dashboard.png)
+
 [![R](https://img.shields.io/badge/R-Shiny-blue)]()
 [![Deployment](https://img.shields.io/badge/Deployment-Posit%20Connect%20Cloud-green)]()
 
