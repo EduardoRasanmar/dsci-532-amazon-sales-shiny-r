@@ -4,6 +4,7 @@ library(dplyr)
 library(readr)
 library(lubridate)
 library(ggplot2)
+library(scales)
 
 # Load data
 sales_data <- read_csv("data/raw/amazon_sales_dataset.csv", show_col_types = FALSE) |>
@@ -52,16 +53,6 @@ ui <- page_fluid(
         font-weight: 600;
         margin-bottom: 12px;
       }
-      .placeholder-box {
-        height: 320px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: 2px dashed #d9d9d9;
-        border-radius: 10px;
-        color: #888;
-        background: #fafafa;
-      }
       .sidebar-title {
         font-size: 18px;
         font-weight: 600;
@@ -74,6 +65,7 @@ ui <- page_fluid(
   
   sidebarLayout(
     sidebarPanel(
+      width = 2,
       div(class = "sidebar-title", "Filters"),
       
       checkboxGroupInput(
@@ -113,17 +105,7 @@ ui <- page_fluid(
         choices = c("Revenue ($)" = "Revenue", "Total Orders" = "Orders"),
         selected = "Revenue"
       ),
-      
-      div(
-        style = "margin-bottom: 18px;",
-        checkboxInput("show_aggregate", "Show Aggregate", value = FALSE)
-      ),
-      
-      div(
-        style = "margin-bottom: 18px;",
-        checkboxInput("show_seasonality", "Show Seasonality", value = TRUE)
-      ),
-      
+    
       actionButton(
         "reset_filters",
         "Reset All Filters",
@@ -132,6 +114,7 @@ ui <- page_fluid(
     ),
     
     mainPanel(
+      width = 10,
       fluidRow(
         column(
           6,
@@ -154,9 +137,9 @@ ui <- page_fluid(
           12,
           div(
             class = "panel-card",
-            div(class = "chart-title", "Revenue Trends"),
-            plotOutput("revenue_trend_plot", height = "320px")
-        )
+            textOutput("trend_title"),
+            plotOutput("revenue_trend_plot", height = "260px")
+          )
         )
       ),
       
@@ -165,16 +148,16 @@ ui <- page_fluid(
           6,
           div(
             class = "panel-card",
-            div(class = "chart-title", "Total Revenue by Quarter"),
-            div(class = "placeholder-box", "Quarter chart will go here")
+            textOutput("quarter_title"),
+            plotOutput("quarter_plot", height = "270px")
           )
         ),
         column(
           6,
           div(
             class = "panel-card",
-            div(class = "chart-title", "Revenue by Payment Method"),
-            div(class = "placeholder-box", "Payment method chart will go here")
+            textOutput("payment_title"),
+            plotOutput("payment_plot", height = "270px")
           )
         )
       )
@@ -184,17 +167,90 @@ ui <- page_fluid(
 
 server <- function(input, output, session) {
 
-  filtered_data <- reactive({
+    filtered_data <- reactive({
     req(input$years, input$months, input$categories, input$regions)
 
     sales_data |>
-      filter(
+        filter(
         Year %in% input$years,
         as.character(Month) %in% input$months,
         product_category %in% input$categories,
         customer_region %in% input$regions
-      )
-  })
+        )
+    })
+
+    metric_var <- reactive({
+        if (input$metric == "Revenue") {
+            "total_revenue"
+        } else {
+            "quantity_sold"
+        }
+    })
+
+    metric_label <- reactive({
+
+        if (input$metric == "Revenue") {
+            "Revenue ($)"
+        } else {
+            "Total Orders (Q)"
+        }
+
+    })
+
+    metric_name <- reactive({
+      if (input$metric == "Revenue") {
+        "Revenue"
+      } else {
+        "Total Orders"
+      }
+    })
+
+    output$payment_plot <- renderPlot({
+        payment_data <- filtered_data() |>
+            group_by(payment_method) |>
+            summarise(
+            value = sum(.data[[metric_var()]], na.rm = TRUE),
+            .groups = "drop"
+            ) |>
+            arrange(desc(value))
+
+        ggplot(payment_data, aes(x = payment_method, y = value, fill = payment_method)) +
+            geom_col() +
+            labs(
+            x = "Payment Method",
+            y = metric_label()
+            ) +
+            theme_minimal(base_size = 13) +
+            theme(
+            axis.text.x = element_text(angle = 20, hjust = 1),
+            legend.position = "none"
+            )+
+            scale_y_continuous(
+              labels = scales::label_number(scale_cut = scales::cut_short_scale())
+            )
+    })
+
+    output$quarter_plot <- renderPlot({
+
+        quarter_data <- filtered_data() |>
+            group_by(Quarter, product_category) |>
+            summarise(
+                value = sum(.data[[metric_var()]], na.rm = TRUE),
+                .groups = "drop"
+            ) |>
+            mutate(Quarter = factor(Quarter, levels = c("Q1","Q2","Q3","Q4")))
+
+        ggplot(quarter_data, aes(x = Quarter, y = value, fill = product_category)) +
+        geom_col(position = "dodge") +
+        labs(
+            x = "Quarter",
+            y = metric_label(),
+            fill = "Category"
+        ) +
+        theme_minimal(base_size = 13)+
+        scale_y_continuous(labels = scales::comma)
+
+    })
 
     output$revenue_trend_plot <- renderPlot({
 
@@ -202,22 +258,23 @@ server <- function(input, output, session) {
             mutate(month_start = floor_date(order_date, unit = "month")) |>
             group_by(month_start, product_category) |>
             summarise(
-            total_revenue = sum(total_revenue, na.rm = TRUE),
+            value = sum(.data[[metric_var()]], na.rm = TRUE),
             .groups = "drop"
-            )
+        )
 
-        ggplot(trend_data, aes(x = month_start, y = total_revenue, color = product_category)) +
+        ggplot(trend_data, aes(x = month_start, y = value, color = product_category)) +
             geom_line(linewidth = 1.2) +
             geom_point(size = 2) +
             labs(
-                x = "Month",
-                y = "Revenue ($)",
-                color = "Category"
+            x = "Month",
+            y = metric_label(),
+            color = "Category"
             ) +
             theme_minimal(base_size = 13)+
             theme(
                 axis.text.x = element_text(angle = 45, hjust = 1)
-            )
+            )+
+        scale_y_continuous(labels = scales::comma)
     })
 
 
@@ -238,6 +295,18 @@ server <- function(input, output, session) {
             "Total Orders: ",
             format(round(orders, 0), big.mark = ",")
         )
+    })
+
+    output$trend_title <- renderText({
+        paste(metric_name(), "Trends by Category")
+    })
+
+    output$quarter_title <- renderText({
+        paste("Quarterly", metric_name(), "by Category")
+    })
+
+    output$payment_title <- renderText({
+        paste(metric_name(), "by Payment Method")
     })
 
   observeEvent(input$reset_filters, {
@@ -271,21 +340,7 @@ server <- function(input, output, session) {
       "metric",
       selected = "Revenue"
     )
-
-    updateCheckboxInput(
-      session,
-      "show_aggregate",
-      value = FALSE
-    )
-
-    updateCheckboxInput(
-      session,
-      "show_seasonality",
-      value = TRUE
-    )
-
   })
-
 }
 
 shinyApp(ui = ui, server = server)
