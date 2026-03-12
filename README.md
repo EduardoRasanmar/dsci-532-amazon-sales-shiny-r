@@ -13,12 +13,6 @@ The dashboard enables users to dynamically filter the data and analyze sales per
 
 ---
 
-## Dashboard Preview
-
-![Dashboard](img/dashboard.png)
-
----
-
 ## Key Features
 
 - Interactive filtering by **Year, Month, Category, and Region**
