@@ -80,7 +80,10 @@ ui <- page_fluid(
         "Months",
         choices = months,
         selected = months,
-        multiple = TRUE
+        multiple = TRUE,
+        options = list(
+          plugins = list("remove_button")
+        )
       ),
       
       selectizeInput(
@@ -89,9 +92,11 @@ ui <- page_fluid(
         choices = categories,
         selected = head(categories, min(3, length(categories))),
         multiple = TRUE,
-        options = list(maxItems = 3)
+        options = list(
+          maxItems = 3,
+          plugins = list("remove_button")
+        )
       ),
-      
       checkboxGroupInput(
         "regions",
         "Regions",
